@@ -22,6 +22,7 @@
 """An implementation of TemporalMemory"""
 
 
+import abc
 import operator
 
 import numpy as np
@@ -116,6 +117,36 @@ class TemporalMemory(object):
     self.activeBasalSegments = EMPTY_UINT_ARRAY
     self.activeApicalSegments = EMPTY_UINT_ARRAY
 
+    self.monitors = {}
+    self.nextMonitorToken = 1
+
+
+  def addMonitor(self, monitor):
+    """
+    Subscribe to TemporalMemory events.
+
+    @param monitor (TemporalMemoryMonitor)
+
+    @return (object)
+    An opaque object that can be used to refer to this monitor.
+    """
+    token = self.nextMonitorToken
+    self.nextMonitorToken += 1
+
+    self.monitors[token] = monitor
+
+    return token
+
+
+  def removeMonitor(self, monitorToken):
+    """
+    Unsubscribe from TemporalMemory events.
+
+    @param monitorToken (object)
+    The return value of addMonitor() from when this monitor was added
+    """
+    del self.monitors[monitorToken]
+
 
   def reset(self):
     self.activeCells = EMPTY_UINT_ARRAY
@@ -123,6 +154,9 @@ class TemporalMemory(object):
     self.prevPredictedCells = EMPTY_UINT_ARRAY
     self.activeBasalSegments = EMPTY_UINT_ARRAY
     self.activeApicalSegments = EMPTY_UINT_ARRAY
+
+    for monitor in self.monitors.values():
+      monitor.afterReset()
 
 
   def compute(self,
@@ -235,6 +269,11 @@ class TemporalMemory(object):
     self.prevPredictedCells = predictedCells
     self.activeBasalSegments = activeBasalSegments
     self.activeApicalSegments = activeApicalSegments
+
+    for monitor in self.monitors.values():
+      monitor.afterCompute(activeColumns, basalInput, apicalInput,
+                           basalGrowthCandidates, apicalGrowthCandidates,
+                           learn)
 
 
   def _calculateBasalLearning(self,
@@ -650,3 +689,17 @@ class TemporalMemory(object):
 
   def getActiveApicalSegments(self):
     return self.activeApicalSegments
+
+
+
+class TemporalMemoryMonitor(object):
+  __metaclass__ = abc.ABCMeta
+
+  @abc.abstractmethod
+  def afterCompute(self, activeColumns, basalInput, basalGrowthCandidates,
+                   apicalInput, apicalGrowthCandidates, learn):
+    pass
+
+  @abc.abstractmethod
+  def afterReset(self):
+    pass
